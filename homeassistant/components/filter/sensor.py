@@ -66,6 +66,7 @@ FILTERS: Registry[str, type[Filter]] = Registry()
 
 CONF_FILTERS = "filters"
 CONF_FILTER_NAME = "filter"
+CONF_SAMPLING_RATE = "sampling_rate"
 CONF_FILTER_WINDOW_SIZE = "window_size"
 CONF_FILTER_PRECISION = "precision"
 CONF_FILTER_RADIUS = "radius"
@@ -160,6 +161,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         ),
         vol.Optional(CONF_NAME): cv.string,
         vol.Optional(CONF_UNIQUE_ID): cv.string,
+        vol.Optional(CONF_SAMPLING_RATE): cv.time_period,
         vol.Required(CONF_FILTERS): vol.All(
             cv.ensure_list,
             [
@@ -187,9 +189,10 @@ async def async_setup_platform(
 
     await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
 
+    entity_id: str = config[CONF_ENTITY_ID]
     name: str | None = config.get(CONF_NAME)
     unique_id: str | None = config.get(CONF_UNIQUE_ID)
-    entity_id: str = config[CONF_ENTITY_ID]
+    sampling_rate: timedelta | None = config.get(CONF_SAMPLING_RATE)
 
     filter_configs: list[dict[str, Any]] = config[CONF_FILTERS]
     filters = [
@@ -197,7 +200,9 @@ async def async_setup_platform(
         for _filter in filter_configs
     ]
 
-    async_add_entities([SensorFilter(name, unique_id, entity_id, filters)])
+    async_add_entities(
+        [SensorFilter(entity_id, name, unique_id, sampling_rate, filters)]
+    )
 
 
 class SensorFilter(SensorEntity):
@@ -207,15 +212,17 @@ class SensorFilter(SensorEntity):
 
     def __init__(
         self,
+        entity_id: str,
         name: str | None,
         unique_id: str | None,
-        entity_id: str,
+        sampling_rate: timedelta | None,
         filters: list[Filter],
     ) -> None:
         """Initialize the sensor."""
+        self._entity = entity_id
         self._attr_name = name
         self._attr_unique_id = unique_id
-        self._entity = entity_id
+        self._sampling_rate = sampling_rate
         self._attr_native_unit_of_measurement = None
         self._state: StateType = None
         self._filters = filters
